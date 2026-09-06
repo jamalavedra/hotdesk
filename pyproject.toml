@@ -1,0 +1,66 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hotdesk"
+version = "0.1.0"
+description = "Local desktops for agents and people"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE"]
+dependencies = [
+    "mcp>=1.28,<2",
+    "httpx>=0.28,<1",
+    "starlette>=1.3.1,<2",
+    "uvicorn>=0.34,<1",
+    "fastmcp==3.2.4",
+    "docker>=7.1,<8",
+    "websockets>=15,<17",
+]
+
+[project.scripts]
+hotdesk = "hotdesk.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/jamalavedra/hotdesk"
+Issues = "https://github.com/jamalavedra/hotdesk/issues"
+Documentation = "https://github.com/jamalavedra/hotdesk#readme"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/hotdesk",
+    "/desktop",
+    "/tests",
+    "/pyproject.toml",
+    "/uv.lock",
+    "/hotdesk.example.toml",
+    "/README.md",
+    "/CONTRIBUTING.md",
+    "/MAINTENANCE.md",
+    "/SECURITY.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/NOTICE",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["hotdesk"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"desktop" = "hotdesk/desktop"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.6",
+    "cryptography>=43",
+    "sse-starlette>=3.4.10,<4",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

@@ -1,0 +1,12 @@
+.hotdesk/
+.venv/
+__pycache__/
+*.pyc
+dist/
+*.egg-info/
+.ruff_cache/
+.DS_Store
+hotdesk.toml
+/plan/
+.env
+.env.*

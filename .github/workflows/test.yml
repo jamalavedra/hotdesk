@@ -1,0 +1,55 @@
+name: Test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 7 * * 1'
+permissions:
+  contents: read
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python: ['3.11', '3.14']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run python -m unittest discover -s tests
+      - run: uv export --no-dev --no-emit-project --format requirements-txt -o /tmp/hotdesk-requirements.txt > /dev/null
+      - run: uvx pip-audit==2.10.1 -r /tmp/hotdesk-requirements.txt --no-deps --disable-pip
+      - run: uv build
+      - name: Check installed wheel outside the checkout
+        shell: bash
+        run: |
+          wheel=("$GITHUB_WORKSPACE"/dist/*.whl)
+          uv run --directory /tmp --isolated --no-project --python '${{ matrix.python }}' --with "${wheel[0]}" hotdesk --version
+  desktop:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: '3.11'
+      - run: uv sync --locked
+      - run: docker build --pull --build-arg HOTDESK_VERSION="$(uv run hotdesk --version)" -t "hotdesk-desktop:$(uv run hotdesk --version)" desktop
+      - run: uv run hotdesk --config hotdesk.example.toml versions
+      - run: uv run python tests/e2e.py
+      - run: uv run python tests/e2e_clone.py
+      - name: Record tested image identity
+        run: docker image inspect "hotdesk-desktop:$(uv run hotdesk --version)" --format '{{.Id}}'

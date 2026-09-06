@@ -1,0 +1,42 @@
+html, body {
+  height: 100%;
+  margin: 0;
+  background: #151922;
+  color: #eee;
+  font: 14px system-ui;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#status {
+  padding: 10px;
+  margin: 0;
+}
+
+#screen {
+  flex: 1;
+  min-height: 0;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button {
+  font: inherit;
+  padding: 8px 12px;
+  margin: 8px;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid #d9f274;
+  outline-offset: 2px;
+}

@@ -1,0 +1,38 @@
+import json
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+components = {}
+try:
+    components["x11"] = (
+        "ready"
+        if subprocess.run(
+            ["xdpyinfo", "-display", ":1"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        ).returncode
+        == 0
+        else "failed"
+    )
+except (OSError, subprocess.TimeoutExpired):
+    components["x11"] = "failed"
+for name, port, path, expected in (
+    ("computer", 8000, "/status", 200),
+    ("chromium", 9222, "/json/version", 200),
+    ("viewer", 6901, "/vnc.html", 200),
+    ("browser", 8931, "/mcp", 400),
+    ("gateway", 8001, "/health", 200),
+):
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=1) as response:
+            status = response.status
+    except urllib.error.HTTPError as error:
+        status = error.code
+    except (OSError, TimeoutError):
+        status = 0
+    components[name] = "ready" if status == expected else "failed"
+print(json.dumps(components))
+sys.exit(0 if all(value == "ready" for value in components.values()) else 1)

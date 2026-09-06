@@ -1,0 +1,7 @@
+Hot Desk's original source is MIT licensed. Its desktop image contains
+independently licensed software, including CUA, Debian, XFCE,
+TigerVNC, noVNC, Chromium, Node.js and Playwright. Their licenses remain
+applicable. This repository does not relicense the desktop image as MIT.
+
+The seccomp profile derives from Moby's public profile. Its source and
+Apache-2.0 license are provided in desktop/NOTICE and desktop/LICENSE.moby.

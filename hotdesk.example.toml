@@ -1,0 +1,12 @@
+[project]
+name = "hotdesk"
+max_running = 1
+memory_budget = "2g"
+
+[profiles.research]
+label = "Research"
+cpus = 2
+memory = "2g"
+
+[desktops.research]
+profile = "research"

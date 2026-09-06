@@ -1,0 +1,12 @@
+chrome-seccomp.json derives from Moby profiles, tag seccomp/v0.2.3:
+https://github.com/moby/profiles/blob/seccomp/v0.2.3/seccomp/default.json
+Copyright Moby contributors. Licensed under Apache-2.0, see LICENSE.moby.
+Hot Desk adds one SCMP_ACT_ALLOW rule for clone and unshare to support
+Chromium's user-namespace sandbox. Other rules remain as published upstream.
+
+The image extends trycua/xfce-cua and installs cua-computer-server, Chromium,
+Node.js and Playwright MCP. These components retain their upstream licenses.
+https://github.com/trycua/cua
+https://www.chromium.org/chromium-projects/
+https://github.com/nodejs/node
+https://github.com/microsoft/playwright-mcp

@@ -1,0 +1,96 @@
+name: Release desktop
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  desktop:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: '3.11'
+      - run: uv sync --locked
+      - name: Validate release version and Python
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$RELEASE_TAG" = "v$(uv run hotdesk --version)"
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run python -m unittest discover -s tests
+      - name: Build and test release artifact
+        shell: bash
+        run: |
+          mkdir evidence
+          desktop_version=$(uv run hotdesk --version)
+          docker build --pull --build-arg "HOTDESK_VERSION=$desktop_version" --label "org.opencontainers.image.revision=$GITHUB_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "hotdesk-desktop:$desktop_version" desktop
+          uv run python tests/e2e.py 2>&1 | tee evidence/e2e.log
+          uv run python tests/e2e_clone.py 2>&1 | tee evidence/e2e-clone.log
+          uv run hotdesk --config hotdesk.example.toml versions > evidence/versions.json
+          docker image inspect "hotdesk-desktop:$desktop_version" --format '{{.Id}}' > evidence/image-id.txt
+      - name: Push exact tested image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/desktop"
+          candidate="$image:$GITHUB_SHA-$ARCH"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "hotdesk-desktop:$(uv run hotdesk --version)" "$candidate"
+          docker push "$candidate"
+          docker image inspect "$candidate" --format '{{index .RepoDigests 0}}' > "evidence/$ARCH.digest"
+          docker logout ghcr.io
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-${{ matrix.arch }}
+          path: evidence/
+          if-no-files-found: error
+  manifest:
+    needs: desktop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: desktop-*
+          path: evidence
+      - name: Publish version manifest from tested digests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/desktop"
+          amd64=$(cat evidence/desktop-amd64/amd64.digest)
+          arm64=$(cat evidence/desktop-arm64/arm64.digest)
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker buildx imagetools create --tag "$image:${RELEASE_TAG#v}" "$amd64" "$arm64"
+          docker buildx imagetools inspect "$image:${RELEASE_TAG#v}" | tee evidence/manifest.txt
+          docker logout ghcr.io
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence
+          path: evidence/
+          if-no-files-found: error
