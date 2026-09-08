@@ -1,0 +1,41 @@
+name: Test release artifacts
+on:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/artifacts.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  upload:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Create sample release evidence
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir evidence
+          printf '%s\n' "$ARCH" > "evidence/$ARCH.digest"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-${{ matrix.arch }}
+          path: evidence/
+          if-no-files-found: error
+  download:
+    needs: upload
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: desktop-*
+          path: evidence
+      - name: Verify release evidence paths and contents
+        run: |
+          test "$(cat evidence/desktop-amd64/amd64.digest)" = amd64
+          test "$(cat evidence/desktop-arm64/arm64.digest)" = arm64
