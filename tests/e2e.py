@@ -17,7 +17,7 @@ import httpx
 from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
 from cryptography.hazmat.primitives.ciphers import Cipher, modes
 from fastmcp import Client
-from fastmcp.client.transports import StreamableHttpTransport
+from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
 from websockets.asyncio.client import connect
 
 from hotdesk.config import load_config
@@ -452,42 +452,39 @@ async def main():
                         flush=True,
                     )
 
-                async def cli_action(*arguments):
-                    command = [
-                        sys.executable,
-                        "-m",
-                        "hotdesk",
-                        "--config",
-                        str(config_path),
-                        "agent",
-                        "cli-e2e",
-                        "--workspace",
-                        "alpha",
-                        *arguments,
-                    ]
-                    result = await asyncio.to_thread(
-                        subprocess.run,
-                        command,
-                        cwd=directory,
-                        capture_output=True,
-                        text=True,
-                        timeout=120,
+                await post("desktops/alpha/lifecycle", {"action": "stop"})
+                transport = StdioTransport(
+                    sys.executable,
+                    ["-m", "hotdesk", "--config", str(config_path), "mcp", "--workspace", "alpha"],
+                    cwd=directory,
+                    keep_alive=False,
+                )
+                async with Client(transport) as agent:
+                    stopped_tools = await agent.list_tools()
+                    assert all(t.name.startswith("workspace_") for t in stopped_tools)
+                    await agent.call_tool("workspace_acquire")
+                    schemas = await agent.list_tools()
+                    assert next(t for t in schemas if t.name == "computer_screenshot").inputSchema
+                    screenshot = await agent.call_tool("computer_screenshot")
+                    image = next(block for block in screenshot.content if block.type == "image")
+                    assert len(base64.b64decode(image.data)) > 1000
+                    tabs = await agent.call_tool("browser_tabs", {"action": "list"})
+                    assert tabs.content and not tabs.is_error
+                    await agent.call_tool(
+                        "browser_evaluate",
+                        {"function": "() => { document.body.dataset.hotdeskMcp = 'verified'; }"},
                     )
-                    assert result.returncode == 0, result.stderr + result.stdout
-                    return json.loads(result.stdout)
-
-                try:
-                    schemas = await cli_action("tools", "computer_screenshot")
-                    assert schemas["tools"][0]["inputSchema"]
-                    screenshot = await cli_action("call", "computer_screenshot")
-                    local_image = Path(screenshot["content"][0]["path"])
-                    assert local_image.is_file() and local_image.stat().st_mode & 0o777 == 0o600
-                    tabs = await cli_action("call", "browser_tabs", '{"action":"list"}')
-                    assert tabs["content"] and not tabs["isError"]
-                finally:
-                    await cli_action("release")
+                    observed = await agent.call_tool(
+                        "browser_evaluate", {"function": "() => document.body.dataset.hotdeskMcp"}
+                    )
+                    assert "verified" in result_text(observed)
+                    await agent.call_tool("workspace_release")
+                    # Leave a reservation to verify graceful stdio disconnect releases it.
+                    await agent.call_tool("computer_screenshot")
+                rows = (await http.get("/api/desktops")).json()
+                assert next(row for row in rows if row["name"] == "alpha")["state"] == "idle"
                 print(
-                    "PASS direct agent CLI outside checkout, discovery, reservation reuse, screenshot artifact and release",
+                    "PASS MCP stdio outside checkout, tool schemas, inline screenshot and disconnect release",
                     flush=True,
                 )
 

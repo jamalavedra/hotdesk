@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 from fastmcp import Client
-from fastmcp.client.transports import StreamableHttpTransport
+from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
 
 from hotdesk.config import load_config
 from hotdesk.runtime import Runtime
@@ -124,32 +124,28 @@ async def main():
                         assert details["code"] == "WORKSPACE_BUSY", details
                         assert details["checkpoint"]["available"] is False, details
                         assert details["owner"] == "source-owner", details
-                    cli = await asyncio.to_thread(
-                        subprocess.run,
+                    transport = StdioTransport(
+                        sys.executable,
                         [
-                            sys.executable,
                             "-m",
                             "hotdesk",
                             "--config",
                             str(config_path),
-                            "agent",
-                            "cli-competitor",
+                            "mcp",
                             "--workspace",
                             "source",
-                            "call",
-                            "computer_run_command",
-                            '{"command":"touch /home/cua/should-not-exist"}',
                         ],
-                        capture_output=True,
-                        text=True,
-                        timeout=60,
+                        keep_alive=False,
                     )
-                    assert cli.returncode == 1, cli.stdout + cli.stderr
-                    cli_busy = json.loads(cli.stdout)
-                    assert (
-                        cli_busy["isError"]
-                        and cli_busy["structuredContent"]["code"] == "WORKSPACE_BUSY"
-                    ), cli_busy
+                    async with Client(transport) as competitor:
+                        busy = await competitor.call_tool(
+                            "computer_run_command",
+                            {"command": "touch /home/cua/should-not-exist"},
+                            raise_on_error=False,
+                        )
+                        assert (
+                            busy.is_error and busy.structured_content["code"] == "WORKSPACE_BUSY"
+                        ), busy
                     assert "not-executed" in await command(
                         source, "test ! -e /home/cua/should-not-exist && echo not-executed"
                     )
@@ -225,7 +221,7 @@ async def main():
                         await clone.call_tool("workspace_release", {})
                     await source.call_tool("workspace_release", {})
                 print(
-                    "PASS explicit approval, CLI busy error, cloned browser cookie, stale checkpoint, isolated writes and parallel tools",
+                    "PASS explicit approval, MCP busy error, cloned browser cookie, stale checkpoint, isolated writes and parallel tools",
                     flush=True,
                 )
                 await stop_manager()

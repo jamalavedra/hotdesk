@@ -96,7 +96,7 @@ def main():
         "doctor": "Check Docker and manager readiness",
         "status": "Show workspace status",
         "versions": "Report installed versions",
-        "skill": "Print agent instructions for using Hot Desk directly",
+        "skill": "Print the MCP instructions",
     }.items():
         sub.add_parser(name, help=help)
     opening = sub.add_parser("open", help="Start the manager or open a workspace desktop")
@@ -137,20 +137,8 @@ def main():
     )
     serve = sub.add_parser("serve", help="Run the local manager and agent gateway")
     serve.add_argument("--port", type=int)
-    agent = sub.add_parser(
-        "agent", help="Use a desktop through a named agent session; no MCP setup needed"
-    )
-    agent.add_argument("session", help="Unique name for this task; reuse across commands")
-    agent.add_argument("--workspace", help="Workspace name, remembered for this session")
-    agent.add_argument("--task", default="")
-    actions = agent.add_subparsers(dest="action", required=True)
-    listing = actions.add_parser("tools", help="Discover tool names and argument schemas")
-    listing.add_argument("tool", nargs="?")
-    call = actions.add_parser("call", help="Call a tool; reserves the workspace automatically")
-    call.add_argument("tool")
-    call.add_argument("arguments", nargs="?", default="{}", help="JSON object, or - to read stdin")
-    actions.add_parser("status", help="Read ownership and readiness")
-    actions.add_parser("release", help="Release this task's workspace")
+    mcp = sub.add_parser("mcp", help="Expose a workspace's tools and images over MCP stdio")
+    mcp.add_argument("--workspace", required=True, help="Workspace to expose to this MCP client")
     args = parser.parse_args()
     try:
         if args.command == "skill":
@@ -166,26 +154,10 @@ def main():
             print("Default configuration: " + str(config.path))
             return
         config = load_config(select_config(args.config))
-        if args.command == "agent":
-            from hotdesk.agent import execute
+        if args.command == "mcp":
+            from hotdesk.mcp import run
 
-            arguments = getattr(args, "arguments", None)
-            if arguments is not None:
-                arguments = json.loads(sys.stdin.read() if arguments == "-" else arguments)
-            result = asyncio.run(
-                execute(
-                    config,
-                    args.session,
-                    args.workspace,
-                    args.action,
-                    tool=getattr(args, "tool", None),
-                    arguments=arguments,
-                    task=args.task,
-                )
-            )
-            print(json.dumps(result, indent=2))
-            if result.get("isError"):
-                sys.exit(1)
+            asyncio.run(run(config, args.workspace))
             return
         if getattr(args, "port", None) is not None and not 1024 <= args.port <= 65535:
             raise ValueError("port must be between 1024 and 65535")

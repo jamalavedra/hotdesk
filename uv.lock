@@ -573,6 +573,7 @@ name = "hotdesk"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "docker" },
     { name = "fastmcp" },
     { name = "httpx" },
@@ -591,6 +592,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.5,<5" },
     { name = "docker", specifier = ">=7.1,<8" },
     { name = "fastmcp", specifier = "==3.2.4" },
     { name = "httpx", specifier = ">=0.28,<1" },
