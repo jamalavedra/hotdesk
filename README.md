@@ -1,6 +1,6 @@
 # Hot Desk
 
-Persistent local Linux desktops for AI agents. Each desktop keeps its own home directory and Chromium profile across sessions. An agent reserves a desktop through the CLI, and you watch or take over in the browser when it gets stuck.
+Persistent local Linux desktops for AI agents. Each desktop keeps its own home directory and Chromium profile across sessions. An agent reserves a desktop through MCP, and you watch or take over in the browser when it gets stuck.
 
 ![Claude Code researching posts on X and writing a Google Doc inside a Hot Desk desktop, then a human taking over in the viewer](docs/demo.gif)
 
@@ -11,7 +11,7 @@ Demo from [Agents love computers](https://www.jamalavedra.com/blog/agents-love-c
 - Desktops are Docker Compose services built on [trycua/xfce-cua](https://github.com/trycua/cua) with Chromium, TigerVNC, and noVNC.
 - Inside each desktop, `cua-computer-server` provides computer tools (screenshot, click, type) and [Playwright MCP](https://github.com/microsoft/playwright-mcp) provides browser tools.
 - A Python manager on the host owns reservations, proxies tool calls, and serves the noVNC viewer. It binds to `127.0.0.1` with token auth and stores reservations and operation history in SQLite.
-- Agents call `hotdesk agent ... call TOOL '{...}'` from a shell, with no MCP server registration. Hot Desk does not run a model or need a model API key.
+- Agents connect through MCP for direct tool calls and screenshot images. Hot Desk does not run a model or need a model API key.
 
 Status: development, no stable release. Requires macOS or Linux with a local Docker daemon. Windows hosts and remote Docker engines are unsupported. Desktops are containers sharing Docker's kernel, not VMs.
 
@@ -44,32 +44,33 @@ Config resolution order: `--config PATH`, then `./hotdesk.toml`, then the rememb
 
 ## Agent usage
 
-Tell the agent "Use the Research Hot Desk desktop for this task." `hotdesk skill` prints the instructions it needs. For Codex:
+Connect your agent's MCP client to one workspace using this stdio server configuration. Use absolute paths so it works outside the checkout:
 
-```sh
-mkdir -p ~/.codex/skills/hotdesk
-(set -C; hotdesk skill > ~/.codex/skills/hotdesk/SKILL.md)
+```json
+{
+  "mcpServers": {
+    "hotdesk-research": {
+      "command": "hotdesk",
+      "args": ["--config", "/absolute/path/to/hotdesk.toml", "mcp", "--workspace", "research"]
+    }
+  }
+}
 ```
 
-`set -C` refuses to overwrite an existing skill. Start a new agent session afterwards.
+If `hotdesk` is not on the client's PATH, use its absolute executable path. Each connection gets its own identity and is bound to the named workspace. No tokens or model API keys go in this configuration.
 
-The agent picks a unique session name per task, reuses it for that task, and releases it when done:
-
-```sh
-hotdesk agent research-a7c9 --workspace research tools      # list tools
-hotdesk agent research-a7c9 tools browser_navigate           # argument schema
-hotdesk agent research-a7c9 call browser_navigate '{"url":"https://example.com/"}'
-hotdesk agent research-a7c9 call computer_screenshot
-hotdesk agent research-a7c9 release
-```
+The agent receives the browser, computer, and workspace tool schemas directly. Tell it "Use the Research Hot Desk desktop for this task."
 
 Rules:
 
-- Each browser or computer call acquires or renews a five-minute reservation. `tools` does not. `call workspace_renew` renews it during long pauses.
-- One in-flight command per session. Other sessions get `WORKSPACE_BUSY` with the owner and latest checkpoint while the desktop is reserved or under human control.
-- Tool errors exit nonzero and are not retried. Results are JSON. Screenshots stay in `.hotdesk/<project>/agent-sessions/artifacts/` after release until you delete them.
-- A stopped desktop exposes only workspace tools. Call `workspace_acquire`, then list tools again.
+- Each browser or computer call acquires or renews a five-minute reservation. Listing tools does not. Call `workspace_renew` during long pauses and `workspace_release` when the task ends.
+- Tool calls run one at a time per connection; discovery requests wait their turn. Other connections get `WORKSPACE_BUSY` with the owner and latest checkpoint while the desktop is reserved or under human control.
+- Tool errors are returned without retrying. Hot Desk does not save screenshot files on the host.
+- A stopped desktop exposes only workspace tools. Call `workspace_acquire`, then refresh the tool list.
+- Disconnecting attempts to release the reservation. After an abrupt exit, an idle reservation expires; an uncertain action still requires recovery.
 - The manager tracks tool calls, not detached guest processes. The agent must finish or stop those before release or takeover.
+
+MCP supplies the agent instructions at connection time, including account checks, handoff, and clone rules. `hotdesk skill` prints the same instructions for inspection.
 
 ### Checkpoints and clones
 
@@ -85,10 +86,9 @@ When a desktop is busy, the agent must ask the user whether to wait or clone the
 
 ```sh
 hotdesk clone research research-copy --checkpoint CHECKPOINT_ID --user-approved
-hotdesk agent copy-a7c9 --workspace research-copy tools
-hotdesk agent copy-a7c9 release
-hotdesk discard research-copy --outputs-saved
 ```
+
+Connect a separate MCP server with `--workspace research-copy` to use the clone, and call `workspace_release` before running `hotdesk discard research-copy --outputs-saved`.
 
 A clone runs the checkpoint's image with its own writable copy of the checkpoint's home. It excludes later source changes, never merges back, and keeps its local state across release and manager restarts. It shares the source's signed-in accounts, so anything posted or edited online from the clone stays online after discard. The example config allows one running desktop. Raise `max_running` and `memory_budget` before running source and clone together.
 
@@ -141,7 +141,7 @@ hotdesk apply --no-build
 | `hotdesk manager-logs --lines 50` | Tail the manager log |
 | `hotdesk versions` | Host dependencies, image ID, and the image's package inventory |
 
-Lifecycle commands need a running manager. Human takeover blocks new agent actions on that workspace at once, then waits for the in-flight one. Takeover survives manager restarts. After a restart, reopen viewer tabs; CLI sessions refresh credentials on their next call.
+Lifecycle commands need a running manager. Human takeover blocks new agent actions on that workspace at once, then waits for the in-flight one. Takeover survives manager restarts. After a restart, reopen viewer tabs; MCP connections refresh credentials on their next call.
 
 An uncertain tool outcome puts the workspace into recovery. Inspect it in the viewer and `status` before running `recover`, which restarts the desktop and drops unsaved work. Recovery cannot undo submitted forms, posts, or cloud document edits.
 

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import socket
@@ -10,6 +11,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import httpx
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 
 from hotdesk.__main__ import open_workspace, stop_manager
 from hotdesk.config import load_config
@@ -148,29 +151,28 @@ class LauncherTests(unittest.TestCase):
                     time.sleep(0.05)
                 self.assertFalse((config.state_dir / "connection.json").exists())
 
-                cold = subprocess.run(
-                    [
+                async def cold_connection():
+                    transport = StdioTransport(
                         sys.executable,
-                        "-m",
-                        "hotdesk",
-                        "--config",
-                        str(config.path),
-                        "agent",
-                        "cold-agent",
-                        "--workspace",
-                        "test",
-                        "call",
-                        "workspace_status",
-                    ],
-                    cwd=root,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=40,
-                )
-                self.assertEqual(cold.returncode, 1)
-                self.assertTrue(json.loads(cold.stdout)["isError"])
-                self.assertIn("Cannot connect to Docker", cold.stdout)
+                        [
+                            "-m",
+                            "hotdesk",
+                            "--config",
+                            str(config.path),
+                            "mcp",
+                            "--workspace",
+                            "test",
+                        ],
+                        cwd=str(root),
+                        env=env,
+                        keep_alive=False,
+                    )
+                    async with Client(transport) as client:
+                        return await client.call_tool("workspace_status", {}, raise_on_error=False)
+
+                cold = asyncio.run(cold_connection())
+                self.assertTrue(cold.is_error)
+                self.assertIn("Cannot connect to Docker", str(cold.content))
                 with patch.dict(os.environ, env, clear=True):
                     with self.assertRaisesRegex(RuntimeError, "another port"):
                         ensure_manager(config, port=7890)

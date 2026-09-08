@@ -19,9 +19,9 @@ uv run python tests/e2e.py
 uv run python tests/e2e_clone.py
 ```
 
-`tests/e2e.py` creates two disposable desktops and tests task reservation races, actual input, screenshots, browser navigation, handoff, manager crash recovery, profile persistence, and backup/restore. It exercises the internal HTTP MCP gateway and agent CLI sessions from outside the checkout. It removes only its test project's resources. A successful tool response is not enough; checks must observe the effect in the guest.
+`tests/e2e.py` creates two disposable desktops and tests task reservation races, actual input, screenshots, browser navigation, handoff, manager crash recovery, profile persistence, and backup/restore. It exercises the internal HTTP MCP gateway and MCP stdio connections from outside the checkout. It removes only its test project's resources. A successful tool response is not enough; checks must observe the effect in the guest.
 
-The clone check tests the busy CLI response, explicit approval, checkpoint browser cookies, isolated writes, parallel actions, manager restart, and disposal. CI runs both Docker checks on native amd64 and arm64 Linux runners.
+The clone check tests the busy MCP response, explicit approval, checkpoint browser cookies, isolated writes, parallel actions, manager restart, and disposal. CI runs both Docker checks on native amd64 and arm64 Linux runners.
 
 For viewer changes, install Playwright for the test process and run the disposable deployment with its browser check enabled:
 

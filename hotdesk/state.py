@@ -122,7 +122,7 @@ class State:
         ).fetchone()
         if row is None:
             raise ControlConflict(
-                "Invalid or expired workspace credential. Use a new agent session name."
+                "Invalid or expired workspace credential. Reconnect the Hot Desk MCP server."
             )
         return dict(row)
 

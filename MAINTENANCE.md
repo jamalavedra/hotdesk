@@ -28,7 +28,7 @@ Dependabot checks host dependencies, GitHub Actions and the Docker base weekly. 
 
 Track [CUA releases](https://github.com/trycua/cua/releases), [Playwright MCP releases](https://github.com/microsoft/playwright-mcp/releases), [Node releases](https://nodejs.org/en/about/previous-releases), and [MCP Python SDK releases](https://github.com/modelcontextprotocol/python-sdk/releases).
 
-The host pins standalone FastMCP in `pyproject.toml` for proxying and middleware. The underlying MCP protocol SDK remains a separate dependency. Test upgrades together, including tool discovery, images, reservation gates, and agent CLI sessions through the internal HTTP gateway. Track [FastMCP releases](https://github.com/PrefectHQ/fastmcp/releases) as well as the protocol SDK.
+The host pins standalone FastMCP in `pyproject.toml` for proxying and middleware. The underlying MCP protocol SDK remains a separate dependency. Test upgrades together, including tool discovery, images, reservation gates, and MCP stdio connections through the internal HTTP gateway. Track [FastMCP releases](https://github.com/PrefectHQ/fastmcp/releases) as well as the protocol SDK.
 
 For a runtime update:
 
