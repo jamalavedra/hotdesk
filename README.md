@@ -94,6 +94,19 @@ A clone runs the checkpoint's image with its own writable copy of the checkpoint
 
 `--user-approved` records that the user chose the clone. It cannot verify that, so agents must ask first. `--outputs-saved` confirms needed outputs are saved elsewhere or none exist. `discard` refuses to delete a configured source workspace.
 
+### Credentials and payments
+
+Each desktop runs [Valet](https://github.com/joalavedra/valet), which adds `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay` next to the browser tools. Agents work with handles; Valet types logins into the desktop's Chromium or injects API keys and card aliases on the way out. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`.
+
+Provision credentials from the host. The container is `<project>-desktop-<workspace>-1`:
+
+```sh
+docker exec -it -u cua hotdesk-desktop-research-1 start-valet.sh cli cred add --type login --site github.com --label me
+docker exec -u cua hotdesk-desktop-research-1 start-valet.sh cli cred list
+```
+
+Valet's state lives in `/home/cua/.valet`: the SQLite database and the master key that encrypts it. Both are in the home volume, so checkpoints, clones, and backups carry them. The agent never receives secret values through tools, but it has administrator access inside the guest and can read that directory. Use Valet to keep secrets out of prompts, transcripts, and logs, not to hide them from a hostile agent.
+
 ## Configuration
 
 ```toml

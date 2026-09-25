@@ -12,3 +12,4 @@ Initial development version, `0.1.0`.
 - Recovery for uncertain tool outcomes and credential revocation on manager restart.
 - Stopped-workspace backups, checkpoints, and isolated clones requiring explicit user approval.
 - Dependency inventories, pinned direct dependencies, and Docker checks for amd64 and arm64.
+- Valet 0.1.0 in the desktop image: credential and payment tools through the workspace MCP server, backed by the desktop's own Chromium.

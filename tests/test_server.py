@@ -11,7 +11,7 @@ import httpx
 from fastmcp.exceptions import ToolError
 
 from hotdesk.runtime import CapacityError
-from hotdesk.server import ControlConflict, DeskService, create_app
+from hotdesk.server import ControlConflict, DeskService, create_app, tool_kind
 
 
 class ServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -287,3 +287,11 @@ class ServiceTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ControlConflict):
                 self.service.state.authenticate(token, "copy")
             await asyncio.create_task(self.service.reconfigure(updated))
+
+
+class ToolKindTest(unittest.TestCase):
+    def test_valet_tools_route_before_browser_prefix(self):
+        self.assertEqual(tool_kind("browser_fill"), "valet")
+        self.assertEqual(tool_kind("request_grant"), "valet")
+        self.assertEqual(tool_kind("browser_fill_form"), "browser")
+        self.assertEqual(tool_kind("screenshot"), "computer")

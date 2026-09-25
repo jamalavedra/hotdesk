@@ -196,7 +196,7 @@ class DeskService:
             return result
 
     async def endpoint(self, name, kind):
-        if name not in self.locks or kind not in ("computer", "browser", "viewer"):
+        if name not in self.locks or kind not in ("computer", "browser", "viewer", "valet"):
             raise ValueError("Unknown workspace or tool kind")
         row = next(row for row in await self.observed() if row["name"] == name)
         url = row.get(f"{kind}_url")
@@ -208,6 +208,7 @@ class DeskService:
             "computer": ("computer", "x11", "gateway"),
             "browser": ("browser", "chromium", "x11", "gateway"),
             "viewer": ("viewer", "x11", "gateway"),
+            "valet": ("valet", "gateway"),
         }[kind]
         failed = [
             component
@@ -386,6 +387,15 @@ class DeskService:
             return result
 
 
+VALET_TOOLS = frozenset({"list_handles", "request_grant", "http_call", "browser_fill", "pay"})
+
+
+def tool_kind(tool):
+    if tool in VALET_TOOLS:
+        return "valet"
+    return "browser" if tool.startswith("browser_") else "computer"
+
+
 def workspace_server(service, name):
     class Ownership(Middleware):
         async def on_message(self, context, call_next):
@@ -400,9 +410,7 @@ def workspace_server(service, name):
                 "workspace_release",
             }:
                 return await call_next(context)
-            await service.endpoint(
-                name, "browser" if context.message.name.startswith("browser_") else "computer"
-            )
+            await service.endpoint(name, tool_kind(context.message.name))
             return await service.execute(
                 service.agent(name), context.message.name, lambda: call_next(context)
             )
@@ -425,7 +433,7 @@ def workspace_server(service, name):
         "Release when finished. Human takeover revokes your reservation. Never retry an uncertain action.",
         mask_error_details=False,
     )
-    for kind in ("computer", "browser"):
+    for kind in ("computer", "browser", "valet"):
 
         async def factory(kind=kind):
             url = await service.endpoint(name, kind)

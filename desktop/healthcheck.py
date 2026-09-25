@@ -25,6 +25,7 @@ for name, port, path, expected in (
     ("viewer", 6901, "/vnc.html", 200),
     ("browser", 8931, "/mcp", 400),
     ("gateway", 8001, "/health", 200),
+    ("valet", 14400, "/healthz", 200),
 ):
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=1) as response:
