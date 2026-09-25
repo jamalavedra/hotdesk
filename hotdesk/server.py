@@ -200,6 +200,10 @@ class DeskService:
             raise ValueError("Unknown workspace or tool kind")
         row = next(row for row in await self.observed() if row["name"] == name)
         url = row.get(f"{kind}_url")
+        if kind == "valet" and not url and row["status"] == "running":
+            raise ControlConflict(
+                "Valet is not enabled in this desktop image (build with HOTDESK_VALET=1)."
+            )
         if not url or row["status"] != "running":
             raise ControlConflict(f"Workspace {name} is stopped. Run hotdesk start {name}.")
         if kind != "viewer" and row.get("health") != "healthy":
@@ -396,6 +400,47 @@ def tool_kind(tool):
     return "browser" if tool.startswith("browser_") else "computer"
 
 
+class ValetProvider(ProxyProvider):
+    """ProxyProvider that reports no components when the desktop lacks Valet.
+
+    The shared client factory raises ControlConflict when Valet is not
+    enabled; that must not break list_tools for the other providers, so the
+    list methods short-circuit instead. Cache stays disabled (cache_ttl=0),
+    so a workspace upgraded to a Valet image picks tools up on the next call.
+    """
+
+    def __init__(self, client_factory, service, name, **kwargs):
+        super().__init__(client_factory, **kwargs)
+        self._service = service
+        self._name = name
+
+    async def _valet_ready(self):
+        for row in await self._service.observed():
+            if row["name"] == self._name:
+                return row.get("components", {}).get("valet") == "ready"
+        return False
+
+    async def _list_tools(self):
+        if not await self._valet_ready():
+            return []
+        return await super()._list_tools()
+
+    async def _list_resources(self):
+        if not await self._valet_ready():
+            return []
+        return await super()._list_resources()
+
+    async def _list_resource_templates(self):
+        if not await self._valet_ready():
+            return []
+        return await super()._list_resource_templates()
+
+    async def _list_prompts(self):
+        if not await self._valet_ready():
+            return []
+        return await super()._list_prompts()
+
+
 def workspace_server(service, name):
     class Ownership(Middleware):
         async def on_message(self, context, call_next):
@@ -447,7 +492,10 @@ def workspace_server(service, name):
                 )
             )
 
-        server.add_provider(ProxyProvider(factory, cache_ttl=0))
+        if kind == "valet":
+            server.add_provider(ValetProvider(factory, service, name, cache_ttl=0))
+        else:
+            server.add_provider(ProxyProvider(factory, cache_ttl=0))
 
     @server.tool()
     async def workspace_status() -> dict:

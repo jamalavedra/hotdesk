@@ -6,6 +6,8 @@ ARG PLAYWRIGHT_MCP_VERSION=0.0.80
 ARG NODE_VERSION=22.23.2
 ARG PIP_VERSION=26.2.1
 ARG VALET_VERSION=0.1.0
+# Pass --build-arg HOTDESK_VALET=1 to bundle the Valet credential broker.
+ARG HOTDESK_VALET=0
 USER root
 ENV VNC_RESOLUTION=1280x800
 
@@ -30,30 +32,36 @@ RUN case "$(dpkg --print-architecture)" in amd64) arch=x64;; arm64) arch=arm64;;
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
-RUN arch="$(dpkg --print-architecture)" && cd /tmp && archive="valet_${VALET_VERSION}_linux_${arch}.tar.gz" \
+RUN if [ "$HOTDESK_VALET" = "1" ]; then \
+    arch="$(dpkg --print-architecture)" && cd /tmp && archive="valet_${VALET_VERSION}_linux_${arch}.tar.gz" \
     && base="https://github.com/joalavedra/valet/releases/download/v${VALET_VERSION}" \
     && curl -fsSLO "${base}/${archive}" \
     && curl -fsSL "${base}/checksums.txt" | grep "  ${archive}$" | sha256sum -c - \
     && tar -xzf "$archive" --no-same-owner valet \
     && install -m 755 valet /usr/local/bin/valet \
     && rm "$archive" valet \
-    && /usr/local/bin/valet --version
+    && /usr/local/bin/valet --version; fi
 
 COPY start-computer.sh start-browser.sh start-vnc.sh start-valet.sh /usr/local/bin/
 COPY gateway.py /usr/local/bin/hotdesk-gateway.py
 COPY healthcheck.py /usr/local/bin/hotdesk-healthcheck.py
 COPY supervisor.conf /tmp/hotdesk-supervisor.conf
+COPY supervisor-valet.conf /tmp/hotdesk-supervisor-valet.conf
 RUN chmod 755 /usr/local/bin/start-computer.sh /usr/local/bin/start-browser.sh /usr/local/bin/start-vnc.sh \
     /usr/local/bin/start-valet.sh \
     && cat /tmp/hotdesk-supervisor.conf >> /etc/supervisor/supervisord.conf \
     && rm /tmp/hotdesk-supervisor.conf \
+    && if [ -x /usr/local/bin/valet ]; then \
+       cat /tmp/hotdesk-supervisor-valet.conf >> /etc/supervisor/supervisord.conf \
+       && /usr/local/bin/valet --version; fi \
+    && rm /tmp/hotdesk-supervisor-valet.conf \
     && /usr/local/bin/node /usr/local/lib/node_modules/@playwright/mcp/cli.js --version \
     && bash -n /usr/local/bin/start-computer.sh \
     && bash -n /usr/local/bin/start-browser.sh \
     && bash -n /usr/local/bin/start-vnc.sh \
     && bash -n /usr/local/bin/start-valet.sh
 
-RUN /opt/venv/bin/python3 -c 'import json, subprocess, sys; from importlib.metadata import distributions; print(json.dumps({"python": sys.version.split()[0], "python_packages": {d.metadata["Name"]: d.version for d in distributions()}, "debian_packages": subprocess.check_output(["dpkg-query", "-W", "chromium", "novnc", "tigervnc-standalone-server", "xfce4"], text=True).splitlines(), "node": subprocess.check_output(["/usr/local/bin/node", "--version"], text=True).strip(), "playwright_mcp": subprocess.check_output(["/usr/local/bin/node", "/usr/local/lib/node_modules/@playwright/mcp/cli.js", "--version"], text=True).strip(), "valet": subprocess.check_output(["/usr/local/bin/valet", "--version"], text=True).split()[-1]}, sort_keys=True))' > /etc/hotdesk-versions.json
+RUN /opt/venv/bin/python3 -c 'import json, os, subprocess, sys; from importlib.metadata import distributions; print(json.dumps({"python": sys.version.split()[0], "python_packages": {d.metadata["Name"]: d.version for d in distributions()}, "debian_packages": subprocess.check_output(["dpkg-query", "-W", "chromium", "novnc", "tigervnc-standalone-server", "xfce4"], text=True).splitlines(), "node": subprocess.check_output(["/usr/local/bin/node", "--version"], text=True).strip(), "playwright_mcp": subprocess.check_output(["/usr/local/bin/node", "/usr/local/lib/node_modules/@playwright/mcp/cli.js", "--version"], text=True).strip(), **({"valet": subprocess.check_output(["/usr/local/bin/valet", "--version"], text=True).split()[-1]} if os.path.exists("/usr/local/bin/valet") else {})}, sort_keys=True))' > /etc/hotdesk-versions.json
 
 HEALTHCHECK --interval=5s --timeout=10s --start-period=60s --retries=30 \
     CMD /opt/venv/bin/python3 /usr/local/bin/hotdesk-healthcheck.py

@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import urllib.error
@@ -19,14 +20,16 @@ try:
     )
 except (OSError, subprocess.TimeoutExpired):
     components["x11"] = "failed"
-for name, port, path, expected in (
+probes = [
     ("computer", 8000, "/status", 200),
     ("chromium", 9222, "/json/version", 200),
     ("viewer", 6901, "/vnc.html", 200),
     ("browser", 8931, "/mcp", 400),
     ("gateway", 8001, "/health", 200),
-    ("valet", 14400, "/healthz", 200),
-):
+]
+if os.path.exists("/usr/local/bin/valet"):
+    probes.append(("valet", 14400, "/healthz", 200))
+for name, port, path, expected in probes:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=1) as response:
             status = response.status

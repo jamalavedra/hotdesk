@@ -96,7 +96,20 @@ A clone runs the checkpoint's image with its own writable copy of the checkpoint
 
 ### Credentials and payments
 
-Each desktop runs [Valet](https://github.com/joalavedra/valet), which adds `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay` next to the browser tools. Agents work with handles; Valet types logins into the desktop's Chromium or injects API keys and card aliases on the way out. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`.
+Optional. Build the desktop image with `--build-arg HOTDESK_VALET=1` to
+bundle [Valet](https://github.com/joalavedra/valet) v0.1.0, a credential and
+payment broker for agents:
+
+```sh
+docker build --build-arg HOTDESK_VALET=1 -t hotdesk-desktop:valet desktop
+```
+
+then point the workspace at it with `[project] image = "hotdesk-desktop:valet"`
+in `hotdesk.toml` and `hotdesk apply`. Without the flag the image contains
+no Valet and the tools below do not appear in the tool list; calling one by
+name fails with a clear "not enabled" error.
+
+When bundled, each desktop runs Valet, which adds `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay` next to the browser tools. Agents work with handles; Valet types logins into the desktop's Chromium or injects API keys and card aliases on the way out. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`.
 
 Provision credentials from the host. The container is `<project>-desktop-<workspace>-1`:
 

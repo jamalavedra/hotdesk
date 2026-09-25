@@ -295,3 +295,48 @@ class ToolKindTest(unittest.TestCase):
         self.assertEqual(tool_kind("request_grant"), "valet")
         self.assertEqual(tool_kind("browser_fill_form"), "browser")
         self.assertEqual(tool_kind("screenshot"), "computer")
+
+
+class ValetEndpointTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.config = SimpleNamespace(
+            state_dir=Path(self.temp.name),
+            desktops={"alpha": {}},
+            project="test",
+            path=Path(self.temp.name) / "hotdesk.toml",
+        )
+        self.service = DeskService(self.config)
+
+    def tearDown(self):
+        self.service.state.db.close()
+        self.temp.cleanup()
+
+    def row(self, **overrides):
+        row = {
+            "name": "alpha",
+            "status": "running",
+            "health": "healthy",
+            "components": {"gateway": "ready"},
+            "valet_url": None,
+        }
+        row.update(overrides)
+        return row
+
+    async def test_valet_not_enabled_reports_clean_error(self):
+        self.service.observed = AsyncMock(return_value=[self.row()])
+        with self.assertRaisesRegex(ControlConflict, "HOTDESK_VALET=1"):
+            await self.service.endpoint("alpha", "valet")
+
+    async def test_valet_ready_returns_url(self):
+        self.service.observed = AsyncMock(
+            return_value=[
+                self.row(
+                    components={"valet": "ready", "gateway": "ready"},
+                    valet_url="http://127.0.0.1:1234/valet",
+                )
+            ]
+        )
+        self.assertEqual(
+            await self.service.endpoint("alpha", "valet"), "http://127.0.0.1:1234/valet"
+        )
