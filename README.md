@@ -102,7 +102,9 @@ A clone runs the checkpoint's image with its own writable copy of the checkpoint
 docker build --build-arg HOTDESK_VALET=1 -t hotdesk-desktop:valet desktop
 ```
 
-A desktop with Valet adds five tools to its workspace MCP server: `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay`. Agents refer to secrets by handle and never see the values. Valet types logins into the desktop's Chromium and adds API keys and card aliases to outgoing requests. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`.
+A desktop with Valet adds five tools to its workspace MCP server: `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay`. Agents refer to secrets by handle and never see the values. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`. Valet types the login into the desktop's Chromium.
+
+Only logins work out of the box. Valet doesn't inject API keys or cards itself: `http_call` sends requests through an [Infisical Agent Vault](https://github.com/Infisical/agent-vault) proxy, and `pay` goes through a [VGS](https://www.verygoodsecurity.com/) card vault. Hot Desk configures neither, so `http_call` returns `egress not configured` and `pay` returns `pay failed`.
 
 Desktops without Valet don't list these tools, and calling one returns an error saying Valet is not enabled. If Valet crashes, only these five tools stop working.
 
