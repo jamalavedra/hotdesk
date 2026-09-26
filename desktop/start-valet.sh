@@ -18,6 +18,13 @@ if [[ ! -s "$state/master.key" ]]; then
     mv -n "$temporary" "$state/master.key"
     rm -f "$temporary"
 fi
+if [[ -f "$state/env" ]]; then
+    # Operator settings such as VALET_AGENTVAULT_* and VGS_*; the exports below win.
+    set -a
+    # shellcheck source=/dev/null
+    source "$state/env"
+    set +a
+fi
 VALET_MASTER_PASSWORD="$(<"$state/master.key")"
 export VALET_MASTER_PASSWORD
 export VALET_DB="$state/valet.db"
