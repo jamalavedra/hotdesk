@@ -390,14 +390,14 @@ class Runtime:
                 state = attrs.get("State", {})
                 health = state.get("Health", {})
                 components = dict.fromkeys(
-                    ("x11", "chromium", "computer", "browser", "viewer", "gateway", "valet"),
-                    "unknown",
+                    ("x11", "chromium", "computer", "browser", "viewer", "gateway"), "unknown"
                 )
                 if health.get("Log"):
                     try:
                         report = json.loads(health["Log"][-1]["Output"])
+                        known = (*components, "valet")
                         components.update(
-                            {key: value for key, value in report.items() if key in components}
+                            {key: value for key, value in report.items() if key in known}
                         )
                     except (ValueError, KeyError, AttributeError):
                         pass
@@ -424,17 +424,12 @@ class Runtime:
                 port = next(
                     (item["HostPort"] for item in bindings if item["HostIp"] == "127.0.0.1"), None
                 )
-                for key in ("viewer", "computer", "browser"):
+                for key in ("viewer", "computer", "browser", "valet"):
                     row[f"{key}_url"] = (
                         f"http://127.0.0.1:{port}/{key}"
                         if port and row["status"] == "running"
                         else None
                     )
-                row["valet_url"] = (
-                    f"http://127.0.0.1:{port}/valet"
-                    if port and row["status"] == "running" and components.get("valet") == "ready"
-                    else None
-                )
                 if row["status"] == "running":
                     try:
                         stats = container.stats(stream=False, one_shot=True)

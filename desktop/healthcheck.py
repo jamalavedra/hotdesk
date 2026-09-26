@@ -39,4 +39,5 @@ for name, port, path, expected in probes:
         status = 0
     components[name] = "ready" if status == expected else "failed"
 print(json.dumps(components))
-sys.exit(0 if all(value == "ready" for value in components.values()) else 1)
+# Valet is optional: a failed Valet must not take the computer and browser tools down with it.
+sys.exit(0 if all(v == "ready" for k, v in components.items() if k != "valet") else 1)

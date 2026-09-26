@@ -328,6 +328,18 @@ class ValetEndpointTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ControlConflict, "HOTDESK_VALET=1"):
             await self.service.endpoint("alpha", "valet")
 
+    async def test_failed_valet_reports_component_not_missing_install(self):
+        self.service.observed = AsyncMock(
+            return_value=[
+                self.row(
+                    components={"valet": "failed", "gateway": "ready"},
+                    valet_url="http://127.0.0.1:1234/valet",
+                )
+            ]
+        )
+        with self.assertRaisesRegex(ControlConflict, "not ready: valet"):
+            await self.service.endpoint("alpha", "valet")
+
     async def test_valet_ready_returns_url(self):
         self.service.observed = AsyncMock(
             return_value=[

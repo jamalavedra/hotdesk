@@ -200,7 +200,7 @@ class DeskService:
             raise ValueError("Unknown workspace or tool kind")
         row = next(row for row in await self.observed() if row["name"] == name)
         url = row.get(f"{kind}_url")
-        if kind == "valet" and not url and row["status"] == "running":
+        if kind == "valet" and row["status"] == "running" and "valet" not in row["components"]:
             raise ControlConflict(
                 "Valet is not enabled in this desktop image (build with HOTDESK_VALET=1)."
             )
@@ -401,12 +401,12 @@ def tool_kind(tool):
 
 
 class ValetProvider(ProxyProvider):
-    """ProxyProvider that reports no components when the desktop lacks Valet.
+    """ProxyProvider that lists nothing until the desktop reports Valet ready.
 
-    The shared client factory raises ControlConflict when Valet is not
-    enabled; that must not break list_tools for the other providers, so the
-    list methods short-circuit instead. Cache stays disabled (cache_ttl=0),
-    so a workspace upgraded to a Valet image picks tools up on the next call.
+    FastMCP skips a provider whose list call raises, but logs a warning each
+    time, so desktops built without Valet would log one per tool listing.
+    Caching stays off (cache_ttl=0) so a rebuilt desktop shows the tools on
+    the next listing.
     """
 
     def __init__(self, client_factory, service, name, **kwargs):

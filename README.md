@@ -96,29 +96,24 @@ A clone runs the checkpoint's image with its own writable copy of the checkpoint
 
 ### Credentials and payments
 
-Optional. Build the desktop image with `--build-arg HOTDESK_VALET=1` to
-bundle [Valet](https://github.com/joalavedra/valet) v0.1.0, a credential and
-payment broker for agents:
+[Valet](https://github.com/joalavedra/valet) v0.1.0 is an optional credential and payment broker. The default image leaves it out. To include it, build with `HOTDESK_VALET=1`, set `image = "hotdesk-desktop:valet"` under `[project]` in `hotdesk.toml`, and run `hotdesk apply`:
 
 ```sh
 docker build --build-arg HOTDESK_VALET=1 -t hotdesk-desktop:valet desktop
 ```
 
-then point the workspace at it with `[project] image = "hotdesk-desktop:valet"`
-in `hotdesk.toml` and `hotdesk apply`. Without the flag the image contains
-no Valet and the tools below do not appear in the tool list; calling one by
-name fails with a clear "not enabled" error.
+A desktop with Valet adds five tools to its workspace MCP server: `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay`. Agents refer to secrets by handle and never see the values. Valet types logins into the desktop's Chromium and adds API keys and card aliases to outgoing requests. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`.
 
-When bundled, each desktop runs Valet, which adds `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay` next to the browser tools. Agents work with handles; Valet types logins into the desktop's Chromium or injects API keys and card aliases on the way out. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`.
+Desktops without Valet don't list these tools, and calling one returns an error saying Valet is not enabled. If Valet crashes, only these five tools stop working.
 
-Provision credentials from the host (`docker exec` enters as root and `start-valet.sh` drops to the `valet` user). The container is `<project>-desktop-<workspace>-1`:
+Add credentials from the host. The container is named `<project>-desktop-<workspace>-1`:
 
 ```sh
 docker exec -it hotdesk-desktop-research-1 start-valet.sh cli cred add --type login --site github.com --label me
 docker exec hotdesk-desktop-research-1 start-valet.sh cli cred list
 ```
 
-Valet's state lives in `/home/cua/.valet`: the SQLite database and the master key that encrypts it. Both are in the home volume, so checkpoints, clones, and backups carry them. Valet runs as its own `valet` user; the master key and DB are mode 0700/0600 owned by it, so an agent running as `cua` cannot read them directly. `cua` has passwordless sudo in the desktop image, though, so a hostile agent can still escalate; running Valet outside the desktop container is the complete fix.
+Valet keeps its SQLite database and the master key that encrypts it in `/home/cua/.valet`. That directory is on the home volume, so checkpoints, clones, and backups include both. A separate `valet` user owns it with mode 0700, so the agent's `cua` user can't read it directly. `cua` has passwordless sudo, though, so an agent that wants the secrets can get them. Running Valet outside the desktop container would close that gap.
 
 ## Configuration
 
