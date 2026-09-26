@@ -104,7 +104,16 @@ docker build --build-arg HOTDESK_VALET=1 -t hotdesk-desktop:valet desktop
 
 A desktop with Valet adds five tools to its workspace MCP server: `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay`. Agents refer to secrets by handle and never see the values. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`. Valet types the login into the desktop's Chromium.
 
-Only logins work out of the box. Valet doesn't inject API keys or cards itself: `http_call` sends requests through an [Infisical Agent Vault](https://github.com/Infisical/agent-vault) proxy, and `pay` goes through a [VGS](https://www.verygoodsecurity.com/) card vault. Hot Desk configures neither, so `http_call` returns `egress not configured` and `pay` returns `pay failed`.
+Only logins work out of the box. Valet doesn't inject API keys or cards itself: `http_call` sends requests through an [Infisical Agent Vault](https://github.com/Infisical/agent-vault) proxy, and `pay` goes through a [VGS](https://www.verygoodsecurity.com/) card vault. Without their settings, `http_call` returns `egress not configured` and `pay` returns `pay failed`.
+
+To enable them, write the settings to `/home/cua/.valet/env`, one `KEY=value` per line, and restart Valet. `start-valet.sh` loads the file as shell. The variables are listed in Valet's [README](https://github.com/joalavedra/valet#api-credentials-via-infisical-agent-vault). API keys then live in Agent Vault, and each Agent Vault service shows up as an `api://<name>` handle. `valet cred add --type api_key` stores a key that `http_call` never uses.
+
+```sh
+docker exec -i hotdesk-desktop-research-1 sh -c 'cat > /home/cua/.valet/env' < valet.env
+docker exec hotdesk-desktop-research-1 supervisorctl restart hotdesk-valet hotdesk-valet-mcp
+```
+
+Put any CA files the settings name in `/home/cua/.valet/` as well.
 
 Desktops without Valet don't list these tools, and calling one returns an error saying Valet is not enabled. If Valet crashes, only these five tools stop working.
 
