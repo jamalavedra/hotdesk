@@ -395,8 +395,9 @@ class Runtime:
                 if health.get("Log"):
                     try:
                         report = json.loads(health["Log"][-1]["Output"])
+                        known = (*components, "valet")
                         components.update(
-                            {key: value for key, value in report.items() if key in components}
+                            {key: value for key, value in report.items() if key in known}
                         )
                     except (ValueError, KeyError, AttributeError):
                         pass
@@ -423,7 +424,7 @@ class Runtime:
                 port = next(
                     (item["HostPort"] for item in bindings if item["HostIp"] == "127.0.0.1"), None
                 )
-                for key in ("viewer", "computer", "browser"):
+                for key in ("viewer", "computer", "browser", "valet"):
                     row[f"{key}_url"] = (
                         f"http://127.0.0.1:{port}/{key}"
                         if port and row["status"] == "running"
@@ -453,7 +454,7 @@ class Runtime:
                             )
                     except docker.errors.NotFound:
                         row["status"] = "stopped"
-                        for key in ("viewer_url", "computer_url", "browser_url"):
+                        for key in ("viewer_url", "computer_url", "browser_url", "valet_url"):
                             row[key] = None
                 rows.append(row)
             return rows

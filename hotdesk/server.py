@@ -196,10 +196,14 @@ class DeskService:
             return result
 
     async def endpoint(self, name, kind):
-        if name not in self.locks or kind not in ("computer", "browser", "viewer"):
+        if name not in self.locks or kind not in ("computer", "browser", "viewer", "valet"):
             raise ValueError("Unknown workspace or tool kind")
         row = next(row for row in await self.observed() if row["name"] == name)
         url = row.get(f"{kind}_url")
+        if kind == "valet" and row["status"] == "running" and "valet" not in row["components"]:
+            raise ControlConflict(
+                "Valet is not enabled in this desktop image (build with HOTDESK_VALET=1)."
+            )
         if not url or row["status"] != "running":
             raise ControlConflict(f"Workspace {name} is stopped. Run hotdesk start {name}.")
         if kind != "viewer" and row.get("health") != "healthy":
@@ -208,6 +212,7 @@ class DeskService:
             "computer": ("computer", "x11", "gateway"),
             "browser": ("browser", "chromium", "x11", "gateway"),
             "viewer": ("viewer", "x11", "gateway"),
+            "valet": ("valet", "gateway"),
         }[kind]
         failed = [
             component
@@ -386,6 +391,56 @@ class DeskService:
             return result
 
 
+VALET_TOOLS = frozenset({"list_handles", "request_grant", "http_call", "browser_fill", "pay"})
+
+
+def tool_kind(tool):
+    if tool in VALET_TOOLS:
+        return "valet"
+    return "browser" if tool.startswith("browser_") else "computer"
+
+
+class ValetProvider(ProxyProvider):
+    """ProxyProvider that lists nothing until the desktop reports Valet ready.
+
+    FastMCP skips a provider whose list call raises, but logs a warning each
+    time, so desktops built without Valet would log one per tool listing.
+    Caching stays off (cache_ttl=0) so a rebuilt desktop shows the tools on
+    the next listing.
+    """
+
+    def __init__(self, client_factory, service, name, **kwargs):
+        super().__init__(client_factory, **kwargs)
+        self._service = service
+        self._name = name
+
+    async def _valet_ready(self):
+        for row in await self._service.observed():
+            if row["name"] == self._name:
+                return row.get("components", {}).get("valet") == "ready"
+        return False
+
+    async def _list_tools(self):
+        if not await self._valet_ready():
+            return []
+        return await super()._list_tools()
+
+    async def _list_resources(self):
+        if not await self._valet_ready():
+            return []
+        return await super()._list_resources()
+
+    async def _list_resource_templates(self):
+        if not await self._valet_ready():
+            return []
+        return await super()._list_resource_templates()
+
+    async def _list_prompts(self):
+        if not await self._valet_ready():
+            return []
+        return await super()._list_prompts()
+
+
 def workspace_server(service, name):
     class Ownership(Middleware):
         async def on_message(self, context, call_next):
@@ -400,9 +455,7 @@ def workspace_server(service, name):
                 "workspace_release",
             }:
                 return await call_next(context)
-            await service.endpoint(
-                name, "browser" if context.message.name.startswith("browser_") else "computer"
-            )
+            await service.endpoint(name, tool_kind(context.message.name))
             return await service.execute(
                 service.agent(name), context.message.name, lambda: call_next(context)
             )
@@ -425,7 +478,7 @@ def workspace_server(service, name):
         "Release when finished. Human takeover revokes your reservation. Never retry an uncertain action.",
         mask_error_details=False,
     )
-    for kind in ("computer", "browser"):
+    for kind in ("computer", "browser", "valet"):
 
         async def factory(kind=kind):
             url = await service.endpoint(name, kind)
@@ -439,7 +492,10 @@ def workspace_server(service, name):
                 )
             )
 
-        server.add_provider(ProxyProvider(factory, cache_ttl=0))
+        if kind == "valet":
+            server.add_provider(ValetProvider(factory, service, name, cache_ttl=0))
+        else:
+            server.add_provider(ProxyProvider(factory, cache_ttl=0))
 
     @server.tool()
     async def workspace_status() -> dict:

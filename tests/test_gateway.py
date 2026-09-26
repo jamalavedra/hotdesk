@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import httpx
 
-from desktop.gateway import app
+from desktop.gateway import app, upstream
 
 
 class GatewayTests(unittest.IsolatedAsyncioTestCase):
@@ -22,3 +22,6 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(response.status_code, 404)
                 self.assertEqual((await client.get("/health")).status_code, 200)
+
+    def test_valet_routes_to_its_mcp_server(self):
+        self.assertEqual(upstream("valet/mcp"), "http://127.0.0.1:14401/mcp")

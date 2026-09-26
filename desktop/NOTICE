@@ -5,8 +5,10 @@ Hot Desk adds one SCMP_ACT_ALLOW rule for clone and unshare to support
 Chromium's user-namespace sandbox. Other rules remain as published upstream.
 
 The image extends trycua/xfce-cua and installs cua-computer-server, Chromium,
-Node.js and Playwright MCP. These components retain their upstream licenses.
+Node.js and Playwright MCP, plus Valet when built with HOTDESK_VALET=1. These
+components retain their upstream licenses.
 https://github.com/trycua/cua
 https://www.chromium.org/chromium-projects/
 https://github.com/nodejs/node
 https://github.com/microsoft/playwright-mcp
+https://github.com/joalavedra/valet

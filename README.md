@@ -94,6 +94,27 @@ A clone runs the checkpoint's image with its own writable copy of the checkpoint
 
 `--user-approved` records that the user chose the clone. It cannot verify that, so agents must ask first. `--outputs-saved` confirms needed outputs are saved elsewhere or none exist. `discard` refuses to delete a configured source workspace.
 
+### Credentials and payments
+
+[Valet](https://github.com/joalavedra/valet) v0.1.0 is an optional credential and payment broker. The default image leaves it out. To include it, build with `HOTDESK_VALET=1`, set `image = "hotdesk-desktop:valet"` under `[project]` in `hotdesk.toml`, and run `hotdesk apply`:
+
+```sh
+docker build --build-arg HOTDESK_VALET=1 -t hotdesk-desktop:valet desktop
+```
+
+A desktop with Valet adds five tools to its workspace MCP server: `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay`. Agents refer to secrets by handle and never see the values. Valet types logins into the desktop's Chromium and adds API keys and card aliases to outgoing requests. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`.
+
+Desktops without Valet don't list these tools, and calling one returns an error saying Valet is not enabled. If Valet crashes, only these five tools stop working.
+
+Add credentials from the host. The container is named `<project>-desktop-<workspace>-1`:
+
+```sh
+docker exec -it hotdesk-desktop-research-1 start-valet.sh cli cred add --type login --site github.com --label me
+docker exec hotdesk-desktop-research-1 start-valet.sh cli cred list
+```
+
+Valet keeps its SQLite database and the master key that encrypts it in `/home/cua/.valet`. That directory is on the home volume, so checkpoints, clones, and backups include both. A separate `valet` user owns it with mode 0700, so the agent's `cua` user can't read it directly. `cua` has passwordless sudo, though, so an agent that wants the secrets can get them. Running Valet outside the desktop container would close that gap.
+
 ## Configuration
 
 ```toml

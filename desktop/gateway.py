@@ -27,7 +27,7 @@ def authorized(headers):
 
 def upstream(path):
     kind, _, rest = path.partition("/")
-    ports = {"computer": 8000, "browser": 8931, "viewer": 6901}
+    ports = {"computer": 8000, "browser": 8931, "viewer": 6901, "valet": 14401}
     if kind not in ports:
         return None
     return f"http://127.0.0.1:{ports[kind]}/{rest}"

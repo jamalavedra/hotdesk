@@ -240,8 +240,17 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(row["computer_url"], "http://127.0.0.1:12345/computer")
             self.assertEqual(row["memory_usage"], 900)
             self.assertEqual(row["components"]["chromium"], "failed")
+            self.assertNotIn("valet", row["components"])
             self.assertNotIn("password", row["viewer_url"])
             self.assertFalse(self.runtime.config.state_dir.exists())
+
+    def test_valet_component_appears_only_when_the_desktop_reports_it(self):
+        item = self.container()
+        item.attrs["State"]["Health"]["Log"] = [{"Output": json.dumps({"valet": "failed"})}]
+        self.client.containers.list.return_value = [item]
+        row = self.runtime.status()[0]
+        self.assertEqual(row["components"]["valet"], "failed")
+        self.assertEqual(row["valet_url"], "http://127.0.0.1:12345/valet")
 
     def test_sdk_and_cli_pin_context_even_when_global_selection_changes(self):
         context = [{"Endpoints": {"docker": {"Host": "unix:///chosen.sock"}}}]
