@@ -1,6 +1,14 @@
 #!/bin/bash
 set -euo pipefail
-state="$HOME/.valet"
+state=/home/cua/.valet
+if [[ "$(id -u)" = "0" ]]; then
+    # Supervisor runs this as root so a pre-existing volume can be re-owned;
+    # drop to the dedicated valet user before touching any state.
+    install -d -o valet -g valet -m 700 "$state"
+    chown -R valet:valet "$state"
+    exec setpriv --reuid=valet --regid=valet --clear-groups --reset-env \
+        env HOME=/home/cua/.valet "$0" "$@"
+fi
 mkdir -p "$state"
 chmod 700 "$state"
 if [[ ! -s "$state/master.key" ]]; then

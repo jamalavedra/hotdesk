@@ -40,6 +40,7 @@ RUN if [ "$HOTDESK_VALET" = "1" ]; then \
     && tar -xzf "$archive" --no-same-owner valet \
     && install -m 755 valet /usr/local/bin/valet \
     && rm "$archive" valet \
+    && useradd --system --no-create-home --shell /usr/sbin/nologin valet \
     && /usr/local/bin/valet --version; fi
 
 COPY start-computer.sh start-browser.sh start-vnc.sh start-valet.sh /usr/local/bin/

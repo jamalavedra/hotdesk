@@ -118,7 +118,7 @@ docker exec -it -u cua hotdesk-desktop-research-1 start-valet.sh cli cred add --
 docker exec -u cua hotdesk-desktop-research-1 start-valet.sh cli cred list
 ```
 
-Valet's state lives in `/home/cua/.valet`: the SQLite database and the master key that encrypts it. Both are in the home volume, so checkpoints, clones, and backups carry them. The agent never receives secret values through tools, but it has administrator access inside the guest and can read that directory. Use Valet to keep secrets out of prompts, transcripts, and logs, not to hide them from a hostile agent.
+Valet's state lives in `/home/cua/.valet`: the SQLite database and the master key that encrypts it. Both are in the home volume, so checkpoints, clones, and backups carry them. Valet runs as its own `valet` user; the master key and DB are mode 0700/0600 owned by it, so an agent running as `cua` cannot read them directly. `cua` has passwordless sudo in the desktop image, though, so a hostile agent can still escalate; running Valet outside the desktop container is the complete fix.
 
 ## Configuration
 
