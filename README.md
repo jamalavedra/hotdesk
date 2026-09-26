@@ -111,11 +111,11 @@ name fails with a clear "not enabled" error.
 
 When bundled, each desktop runs Valet, which adds `list_handles`, `request_grant`, `http_call`, `browser_fill`, and `pay` next to the browser tools. Agents work with handles; Valet types logins into the desktop's Chromium or injects API keys and card aliases on the way out. To log in, call `browser_navigate`, then `request_grant` for the handle, then `browser_fill` with the tab's `page_url`.
 
-Provision credentials from the host. The container is `<project>-desktop-<workspace>-1`:
+Provision credentials from the host (`docker exec` enters as root and `start-valet.sh` drops to the `valet` user). The container is `<project>-desktop-<workspace>-1`:
 
 ```sh
-docker exec -it -u cua hotdesk-desktop-research-1 start-valet.sh cli cred add --type login --site github.com --label me
-docker exec -u cua hotdesk-desktop-research-1 start-valet.sh cli cred list
+docker exec -it hotdesk-desktop-research-1 start-valet.sh cli cred add --type login --site github.com --label me
+docker exec hotdesk-desktop-research-1 start-valet.sh cli cred list
 ```
 
 Valet's state lives in `/home/cua/.valet`: the SQLite database and the master key that encrypts it. Both are in the home volume, so checkpoints, clones, and backups carry them. Valet runs as its own `valet` user; the master key and DB are mode 0700/0600 owned by it, so an agent running as `cua` cannot read them directly. `cua` has passwordless sudo in the desktop image, though, so a hostile agent can still escalate; running Valet outside the desktop container is the complete fix.
