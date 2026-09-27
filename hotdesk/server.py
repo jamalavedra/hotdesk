@@ -1,6 +1,7 @@
 import asyncio
 import hmac
 import json
+import logging
 import tempfile
 import time
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -58,6 +59,8 @@ async def settle_thread(function, *args, **kwargs):
             task.exception()
         raise
 
+
+logger = logging.getLogger(__name__)
 
 BUSY_MESSAGE = (
     "Hot Desk is starting, stopping, saving, or restoring this desktop. Retry in a few seconds."
@@ -576,11 +579,16 @@ def create_app(config, token: str, port: int, service=None, shutdown=None):
                 rows = []
             for row in rows:
                 if row.get("viewer_url"):
-                    await settle_thread(
-                        service.runtime.set_viewer_control,
-                        row["name"],
-                        service.state.row(row["name"])["state"] == "human",
-                    )
+                    try:
+                        await settle_thread(
+                            service.runtime.set_viewer_control,
+                            row["name"],
+                            service.state.row(row["name"])["state"] == "human",
+                        )
+                    except RuntimeError as error:
+                        # A booting or broken desktop must not stop the manager; each viewer
+                        # connection sets control again before it is accepted.
+                        logger.warning("Viewer control not set for %s: %s", row["name"], error)
             yield
 
     async def api(request):
