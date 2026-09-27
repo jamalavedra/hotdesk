@@ -290,16 +290,31 @@ class ServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.service.state.row("alpha")["state"], "idle")
 
     async def test_startup_failure_closes_state_database(self):
-        self.service.observed = AsyncMock(
-            return_value=[{"name": "alpha", "viewer_url": "http://127.0.0.1:1"}]
-        )
-        self.service.runtime.set_viewer_control.side_effect = RuntimeError("Viewer unavailable")
+        self.service.observed = AsyncMock(side_effect=OSError("Docker socket unavailable"))
         app = create_app(self.config, "secret", 7890, self.service)
-        with self.assertRaisesRegex(RuntimeError, "Viewer unavailable"):
+        with self.assertRaisesRegex(OSError, "Docker socket unavailable"):
             async with app.router.lifespan_context(app):
                 self.fail("Startup should have failed")
         with self.assertRaises(sqlite3.ProgrammingError):
             self.service.state.row("alpha")
+
+    async def test_startup_continues_when_one_viewer_cannot_be_set(self):
+        self.service.observed = AsyncMock(
+            return_value=[
+                {"name": "alpha", "viewer_url": "http://127.0.0.1:1"},
+                {"name": "beta", "viewer_url": "http://127.0.0.1:2"},
+            ]
+        )
+        self.service.runtime.set_viewer_control.side_effect = [
+            RuntimeError('Docker failed: vncconfig: unable to open display ":1"'),
+            None,
+        ]
+        app = create_app(self.config, "secret", 7890, self.service)
+        with self.assertLogs("hotdesk.server", "WARNING") as logs:
+            async with app.router.lifespan_context(app):
+                self.assertEqual(self.service.state.row("alpha")["state"], "idle")
+        self.assertIn("alpha", logs.output[0])
+        self.service.runtime.set_viewer_control.assert_called_with("beta", False)
 
     async def test_dynamic_workspace_lifespans_close_in_their_own_context(self):
         self.service.observed = AsyncMock(return_value=[])
