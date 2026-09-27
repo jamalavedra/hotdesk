@@ -106,14 +106,44 @@ A desktop with Valet adds five tools to its workspace MCP server: `list_handles`
 
 Only logins work out of the box. Valet doesn't inject API keys or cards itself: `http_call` sends requests through an [Infisical Agent Vault](https://github.com/Infisical/agent-vault) proxy, and `pay` goes through a [VGS](https://www.verygoodsecurity.com/) card vault. Without their settings, `http_call` returns `egress not configured` and `pay` returns `pay failed`.
 
-To enable them, write the settings to `/home/cua/.valet/env`, one `KEY=value` per line, and restart Valet. `start-valet.sh` loads the file as shell. The variables are listed in Valet's [README](https://github.com/joalavedra/valet#api-credentials-via-infisical-agent-vault). API keys then live in Agent Vault, and each Agent Vault service shows up as an `api://<name>` handle. `valet cred add --type api_key` stores a key that `http_call` never uses.
+#### API keys through Agent Vault
+
+Run Agent Vault on the host, outside the desktop, so its keys never enter the container. Store each key as a credential and add a service for the host it belongs to:
 
 ```sh
+docker run -d --name agent-vault -p 127.0.0.1:14321:14321 -p 127.0.0.1:14322:14322 \
+  -e AGENT_VAULT_MASTER_PASSWORD="$(openssl rand -base64 24)" \
+  -v agent-vault-data:/data infisical/agent-vault:0.39.3
+av() { docker exec -i agent-vault agent-vault "$@"; }
+av auth register --address http://127.0.0.1:14321 --email you@example.com --password-stdin < owner-password.txt
+av vault credential set GITHUB_TOKEN=ghp_... --vault default
+av vault service add --vault default --name github --host api.github.com --auth-type bearer --token-key GITHUB_TOKEN
+av agent create hotdesk --vault default:proxy    # prints the agent token
+curl -s http://127.0.0.1:14321/v1/mitm/ca.pem > agent-vault-ca.pem
+```
+
+Give Valet the token and CA in `/home/cua/.valet/env`, one `KEY=value` per line. `start-valet.sh` loads the file as shell before starting Valet.
+
+```sh
+# valet.env
+VALET_AGENTVAULT_PROXY=http://AGENT_TOKEN:default@host.docker.internal:14322
+VALET_AGENTVAULT_ADDR=http://host.docker.internal:14321
+VALET_AGENTVAULT_TOKEN=AGENT_TOKEN
+VALET_AGENTVAULT_VAULT=default
+VALET_AGENTVAULT_CA=/home/cua/.valet/agent-vault-ca.pem
+```
+
+```sh
+docker exec -i hotdesk-desktop-research-1 sh -c 'cat > /home/cua/.valet/agent-vault-ca.pem' < agent-vault-ca.pem
 docker exec -i hotdesk-desktop-research-1 sh -c 'cat > /home/cua/.valet/env' < valet.env
 docker exec hotdesk-desktop-research-1 supervisorctl restart hotdesk-valet hotdesk-valet-mcp
 ```
 
-Put any CA files the settings name in `/home/cua/.valet/` as well.
+Each Agent Vault service then shows up as an `api://<name>` handle. The agent calls `request_grant` for it with a policy such as `{"hosts":["api.github.com"]}`, then `http_call`. Agent Vault adds the key upstream, and Valet redacts credential-shaped values in the response. `valet cred add --type api_key` stores a key that `http_call` never uses.
+
+This was tested with OrbStack on macOS, where desktops reach the host as `host.docker.internal`. Docker Engine on Linux doesn't define that name for Hot Desk desktops.
+
+`pay` reads `VGS_*` settings from the same env file; see Valet's [README](https://github.com/joalavedra/valet#card-payments-via-vgs). It hasn't been tested with Hot Desk.
 
 Desktops without Valet don't list these tools, and calling one returns an error saying Valet is not enabled. If Valet crashes, only these five tools stop working.
 
@@ -124,7 +154,7 @@ docker exec -it hotdesk-desktop-research-1 start-valet.sh cli cred add --type lo
 docker exec hotdesk-desktop-research-1 start-valet.sh cli cred list
 ```
 
-Valet keeps its SQLite database and the master key that encrypts it in `/home/cua/.valet`. That directory is on the home volume, so checkpoints, clones, and backups include both. A separate `valet` user owns it with mode 0700, so the agent's `cua` user can't read it directly. `cua` has passwordless sudo, though, so an agent that wants the secrets can get them. Running Valet outside the desktop container would close that gap.
+Valet keeps its SQLite database and the master key that encrypts it in `/home/cua/.valet`. That directory is on the home volume, so checkpoints, clones, and backups include both. A separate `valet` user owns it with mode 0700, so the agent's `cua` user can't read it directly. `cua` has passwordless sudo, though, so an agent that wants the stored logins can get them. API keys kept in Agent Vault on the host are out of its reach; the desktop only holds the Agent Vault token, which lets it send requests through the proxy but not read keys.
 
 ## Configuration
 
