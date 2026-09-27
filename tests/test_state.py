@@ -102,10 +102,16 @@ class StateTests(unittest.TestCase):
         with self.assertRaises(ControlConflict):
             self.state.release(first)
         self.assertEqual(self.state.check(second)["owner"], "Other agent")
-        for mode in ("human", "recovery"):
+        for mode in ("human", "recovery", "busy"):
             self.state.set_mode("one", mode)
             with self.assertRaises(ControlConflict):
                 self.state.release(first)
+
+    def test_restart_turns_interrupted_lifecycle_into_recovery(self):
+        self.state.set_mode("one", "busy")
+        self.state.db.close()
+        self.state = State(self.config)
+        self.assertEqual(self.state.public("one")["state"], "recovery")
 
 
 if __name__ == "__main__":

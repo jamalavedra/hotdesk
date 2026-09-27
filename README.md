@@ -177,6 +177,8 @@ Lifecycle commands need a running manager. Human takeover blocks new agent actio
 
 An uncertain tool outcome puts the workspace into recovery. Inspect it in the viewer and `status` before running `recover`, which restarts the desktop and drops unsaved work. Recovery cannot undo submitted forms, posts, or cloud document edits.
 
+While Hot Desk starts, stops, checkpoints, backs up, or restores a desktop, `status` shows `busy`. Agents and `open` get a message to retry in a few seconds. If the manager dies during one of these, the workspace comes back in recovery.
+
 ## State and security
 
 Homes are Docker volumes mounted at `/home/cua`. Files and browser profiles survive container recreation. Process memory and packages installed outside the home do not. Add lasting system packages to `desktop/Dockerfile` and rebuild.
