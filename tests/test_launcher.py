@@ -216,7 +216,7 @@ class ShutdownTests(unittest.IsolatedAsyncioTestCase):
                     base_url="http://127.0.0.1:7890",
                     headers={"Authorization": "Bearer secret"},
                 ) as client:
-                    for state in ("human", "recovery", "takeover"):
+                    for state in ("human", "recovery", "takeover", "busy"):
                         service.state.set_mode("test", state)
                         self.assertEqual(
                             (await client.post("/api/shutdown", json={})).status_code, 409

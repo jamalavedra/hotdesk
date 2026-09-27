@@ -10,6 +10,7 @@ Initial development version, `0.1.0`.
 - Direct browser viewing, read-only observation, and human takeover.
 - Background manager startup, configuration discovery, and optional macOS login startup.
 - Recovery for uncertain tool outcomes and credential revocation on manager restart.
+- A `busy` state while a desktop starts, stops, or is saved, kept separate from recovery.
 - Stopped-workspace backups, checkpoints, and isolated clones requiring explicit user approval.
 - Dependency inventories, pinned direct dependencies, and Docker checks for amd64 and arm64.
 - Optional Valet 0.1.0 in the desktop image, enabled with `--build-arg HOTDESK_VALET=1`. It adds credential and payment tools to the workspace MCP server; `http_call` and `pay` need Agent Vault and VGS settings in `/home/cua/.valet/env`.
