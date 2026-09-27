@@ -231,6 +231,34 @@ class ServiceTest(unittest.IsolatedAsyncioTestCase):
         self.service.runtime.checkpoint.assert_not_called()
         self.service.state.check(owner)
 
+    async def test_lifecycle_in_progress_is_busy_not_recovery(self):
+        entered, finish = threading.Event(), threading.Event()
+
+        def stop(*args):
+            entered.set()
+            finish.wait(5)
+
+        self.service.runtime.stop = stop
+        task = asyncio.create_task(self.service.lifecycle("alpha", "stop"))
+        await asyncio.to_thread(entered.wait, 2)
+        self.assertEqual(self.service.state.row("alpha")["state"], "busy")
+        with self.assertRaisesRegex(ControlConflict, "Retry in a few seconds"):
+            await self.service.control("alpha", "human")
+        token = self.service.state.register("alpha", "waiting", "test task")
+        waiting = self.service.state.authenticate(token, "alpha")
+        result = await self.service.acquire(waiting, 60)
+        self.assertEqual(result.structured_content["state"], "busy")
+        self.assertFalse(result.structured_content["requires_user_approval"])
+        finish.set()
+        await task
+        self.assertEqual(self.service.state.row("alpha")["state"], "idle")
+
+    async def test_failed_lifecycle_requires_recovery(self):
+        self.service.runtime.stop = Mock(side_effect=RuntimeError("docker stop failed"))
+        with self.assertRaisesRegex(RuntimeError, "docker stop failed"):
+            await self.service.lifecycle("alpha", "stop")
+        self.assertEqual(self.service.state.row("alpha")["state"], "recovery")
+
     async def test_unsettled_record_blocks_handoff_after_storage_failure(self):
         agent = self.agent()
         self.service.state.begin(agent, "click")
@@ -254,7 +282,7 @@ class ServiceTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         self.assertFalse(task.done())
         self.assertTrue(self.service.lifecycle_lock.locked())
-        self.assertEqual(self.service.state.row("alpha")["state"], "recovery")
+        self.assertEqual(self.service.state.row("alpha")["state"], "busy")
         finish.set()
         with self.assertRaises(asyncio.CancelledError):
             await task

@@ -15,7 +15,7 @@ If the user chooses cloning, run `hotdesk clone SOURCE CLONE --checkpoint CHECKP
 
 Without a checkpoint, report that one requires the source to become idle and stopped. Once it is available, use `hotdesk stop SOURCE`, `hotdesk checkpoint SOURCE`, then `hotdesk start SOURCE`. Do not interrupt an active task to create a checkpoint. Clones use the same resource limits as other desktops.
 
-An acknowledged tool failure preserves the reservation so you can inspect the browser before deciding what to do next. It does not guarantee the action had no effects. Unknown operation outcomes require inspection and recovery; do not retry an action that may have succeeded. After the user returns control, a new call can reacquire the workspace. Manager restart invalidates credentials; the MCP connection reconnects, while recovery rules still apply.
+An acknowledged tool failure preserves the reservation so you can inspect the browser before deciding what to do next. It does not guarantee the action had no effects. Unknown operation outcomes require inspection and recovery; do not retry an action that may have succeeded. A `busy` workspace is being started, stopped, or saved; retry in a few seconds without asking the user. After the user returns control, a new call can reacquire the workspace. Manager restart invalidates credentials; the MCP connection reconnects, while recovery rules still apply.
 
 Guest commands must return before the next call. For a background clipboard process, launch `xclip` with Python `subprocess.Popen`, all three standard streams set to `subprocess.DEVNULL`, `close_fds=True`, and `start_new_session=True`. Shell redirection alone can leave inherited descriptors open and stall the computer tool.
 

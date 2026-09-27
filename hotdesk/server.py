@@ -59,6 +59,11 @@ async def settle_thread(function, *args, **kwargs):
         raise
 
 
+BUSY_MESSAGE = (
+    "Hot Desk is starting, stopping, saving, or restoring this desktop. Retry in a few seconds."
+)
+
+
 class BusyResult(ToolResult):
     def to_mcp_result(self):
         return CallToolResult(
@@ -110,6 +115,16 @@ class DeskService:
         return rows
 
     def busy(self, name):
+        if self.state.row(name)["state"] == "busy":
+            return BusyResult(
+                structured_content={
+                    "code": "WORKSPACE_BUSY",
+                    "workspace": name,
+                    **self.state.public(name),
+                    "requires_user_approval": False,
+                    "retry": BUSY_MESSAGE,
+                }
+            )
         checkpoint = self.runtime.checkpoint_info(name)
         data = {
             "code": "WORKSPACE_BUSY",
@@ -156,7 +171,7 @@ class DeskService:
         async with self.lifecycle_lock:
             if self.state.row(name)["state"] != "idle" or self.state.unsettled(name):
                 raise ControlConflict("Release this workspace before creating a checkpoint.")
-            self.state.set_mode(name, "recovery")
+            self.state.set_mode(name, "busy")
             try:
                 return await settle_thread(self.runtime.checkpoint, name)
             finally:
@@ -170,9 +185,14 @@ class DeskService:
         async with self.lifecycle_lock:
             try:
                 result = await settle_thread(self.runtime.clone, source, name, checkpoint_id)
-            finally:
+            except BaseException:
                 await self.reconfigure(self.runtime.config)
                 self.snapshot_at = 0
+                if name in self.locks:
+                    self.state.set_mode(name, "recovery")
+                raise
+            await self.reconfigure(self.runtime.config)
+            self.snapshot_at = 0
             self.state.set_mode(name, "idle")
             return result
 
@@ -186,10 +206,13 @@ class DeskService:
                 name
             ):
                 raise ControlConflict("Release this clone before discarding it.")
-            self.state.set_mode(name, "recovery")
+            self.state.set_mode(name, "busy")
             async with self.locks[name]:
                 try:
                     result = await settle_thread(self.runtime.discard_clone, name)
+                except BaseException:
+                    self.state.set_mode(name, "recovery")
+                    raise
                 finally:
                     await self.reconfigure(self.runtime.config)
                     self.snapshot_at = 0
@@ -268,6 +291,8 @@ class DeskService:
             raise ControlConflict(
                 "Outcome unknown. Inspect the desktop, then restart it to recover."
             )
+        if row["state"] == "busy":
+            raise ControlConflict(BUSY_MESSAGE)
         if mode == "human":
             self.state.set_mode(name, "takeover")
             async with self.locks[name]:
@@ -304,7 +329,7 @@ class DeskService:
                 raise ControlConflict(
                     f"Workspace is {row['state']}; release it before lifecycle changes."
                 )
-            self.state.set_mode(name, "recovery")
+            self.state.set_mode(name, "busy")
             async with self.locks[name]:
                 try:
                     if action in ("stop", "recover"):
@@ -323,6 +348,7 @@ class DeskService:
                     self.snapshot_at = 0
                     raise
                 except BaseException:
+                    self.state.set_mode(name, "recovery")
                     self.snapshot_at = 0
                     raise
                 self.state.set_mode(name, "human" if row["state"] == "human" else "idle")
@@ -340,7 +366,7 @@ class DeskService:
             if updated.project != self.config.project:
                 raise ValueError("Use a separate manager for a different project.name")
             for name in self.locks:
-                self.state.set_mode(name, "recovery")
+                self.state.set_mode(name, "busy")
             previous_config = self.runtime.config
             dispatched = False
             try:
@@ -368,9 +394,8 @@ class DeskService:
                 raise
             except BaseException:
                 self.runtime.config = previous_config
-                if not dispatched:
-                    for name in self.locks:
-                        self.state.set_mode(name, "idle")
+                for name in self.locks:
+                    self.state.set_mode(name, "recovery" if dispatched else "idle")
                 raise
             finally:
                 self.snapshot_at = 0
@@ -382,7 +407,7 @@ class DeskService:
         async with self.lifecycle_lock:
             if self.state.row(name)["state"] != "idle":
                 raise ControlConflict("Release this workspace before backup or restore.")
-            self.state.set_mode(name, "recovery")
+            self.state.set_mode(name, "busy")
             try:
                 result = await settle_thread(getattr(self.runtime, action), name, Path(path))
             finally:
@@ -813,7 +838,7 @@ def create_app(config, token: str, port: int, service=None, shutdown=None):
                 await child_closers.pop(name)()
         for name in added:
             service.state.db.execute("INSERT OR IGNORE INTO desks(name) VALUES (?)", (name,))
-            service.state.set_mode(name, "recovery")
+            service.state.set_mode(name, "busy")
             service.locks[name] = asyncio.Lock()
             child = workspace_server(service, name).http_app(path="/", stateless_http=True)
             child_closers[name] = await start_child(child)

@@ -69,7 +69,8 @@ class State:
                 "UPDATE desks SET state='idle', agent=NULL, owner=NULL, task=NULL, "
                 "expires=NULL, generation=generation+1 WHERE state='reserved'"
             )
-            self.db.execute("UPDATE desks SET state='recovery' WHERE state='takeover'")
+            # A manager that died mid-takeover or mid-lifecycle left an unknown outcome.
+            self.db.execute("UPDATE desks SET state='recovery' WHERE state IN ('takeover','busy')")
             self.db.execute("DELETE FROM agents")
 
     @contextmanager
